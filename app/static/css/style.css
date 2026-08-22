@@ -1,0 +1,183 @@
+/* Chespin Dashboard - Kiosk Mode Custom Styles
+   Palette:
+   - #6A8D73 (Chespin Sage Green)
+   - #F4FDD9 (Pale Cream)
+   - #E4FFE1 (Soft Mint)
+   - #FFE8C2 (Warm Sand)
+   - #F0A868 (Apricot Tangerine)
+*/
+
+:root {
+  /* Core 5-Color Palette Tokens */
+  --palette-sage: #6A8D73;
+  --palette-cream: #F4FDD9;
+  --palette-mint: #E4FFE1;
+  --palette-sand: #FFE8C2;
+  --palette-tangerine: #F0A868;
+
+  /* Theme Surfaces & Backgrounds */
+  --bg-primary: #0d1511;
+  --bg-secondary: #131f19;
+  --card-bg: rgba(19, 31, 25, 0.80);
+  --card-border: rgba(228, 255, 225, 0.08);
+
+  /* Accents & Glows */
+  --accent-primary: var(--palette-sage);
+  --accent-primary-glow: rgba(106, 141, 115, 0.35);
+  --accent-mint-glow: rgba(228, 255, 225, 0.25);
+  --accent-warm: var(--palette-tangerine);
+  --accent-sand: var(--palette-sand);
+  --accent-cream: var(--palette-cream);
+
+  /* Typography */
+  --text-main: var(--palette-cream);
+  --text-bright: var(--palette-mint);
+  --text-muted: #94a89a;
+  --text-subtle: #627768;
+}
+
+/* Kiosk Base Optimizations */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow-x: hidden;
+}
+
+::selection {
+  background-color: var(--palette-sage);
+  color: var(--palette-cream);
+}
+
+/* Glassmorphic Card Styling */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(106, 141, 115, 0.40);
+  box-shadow: 0 12px 36px 0 rgba(106, 141, 115, 0.15);
+}
+
+/* Pulsing Status Indicators */
+.pulse-green,
+.pulse-sage {
+  box-shadow: 0 0 0 0 rgba(106, 141, 115, 0.7);
+  animation: pulse-sage 2s infinite;
+}
+
+@keyframes pulse-sage {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(106, 141, 115, 0.7);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(106, 141, 115, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(106, 141, 115, 0);
+  }
+}
+
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(13, 21, 17, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(106, 141, 115, 0.45);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(106, 141, 115, 0.80);
+}
+
+/* Subtle Shimmer for progress bars */
+.progress-bar-fill {
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Live Clock Display */
+.clock-glow {
+  color: var(--palette-mint);
+  text-shadow: 0 0 16px rgba(106, 141, 115, 0.5), 0 0 32px rgba(228, 255, 225, 0.2);
+}
+
+/* Palette Utility Helper Classes */
+.text-palette-sage {
+  color: var(--palette-sage);
+}
+
+.text-palette-cream {
+  color: var(--palette-cream);
+}
+
+.text-palette-mint {
+  color: var(--palette-mint);
+}
+
+.text-palette-sand {
+  color: var(--palette-sand);
+}
+
+.text-palette-tangerine {
+  color: var(--palette-tangerine);
+}
+
+.bg-palette-sage {
+  background-color: var(--palette-sage);
+}
+
+.bg-palette-cream {
+  background-color: var(--palette-cream);
+}
+
+.bg-palette-mint {
+  background-color: var(--palette-mint);
+}
+
+.bg-palette-sand {
+  background-color: var(--palette-sand);
+}
+
+.bg-palette-tangerine {
+  background-color: var(--palette-tangerine);
+}
+
+.border-palette-sage {
+  border-color: var(--palette-sage);
+}
+
+.border-palette-sand {
+  border-color: var(--palette-sand);
+}
+
+.border-palette-tangerine {
+  border-color: var(--palette-tangerine);
+}
+
+/* Hide cursor when in idle kiosk mode */
+.kiosk-cursor-hide {
+  cursor: none;
+}

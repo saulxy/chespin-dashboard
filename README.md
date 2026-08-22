@@ -1,47 +1,98 @@
 # Chespin Dashboard
 
-A submodule of the [chespin](https://github.com/saulxy/chespin) ecosystem focused on visualizing, tracking, and managing budgets and expenses through an interactive dashboard.
+A local, single-page web dashboard and submodule of the [chespin](https://github.com/saulxy/chespin) ecosystem designed for personal finance tracking, budget visualization, and kiosk display modes (e.g. on a dedicated Raspberry Pi screen or touchscreen).
 
-## Overview
+---
 
-`chespin_dashboard` provides visual analytics and reporting tools for personal finance management. As a submodule of **chespin**, it integrates directly with data sources to generate clear overviews of:
+## 🛠 Tech Stack
 
-- **Budget Tracking**: Monitor allocation versus actual spend across customizable categories.
-- **Expense Analytics**: Visualize spending patterns, trends over time, and breakdown by category or merchant.
-- **Financial Insights**: Generate summaries to aid in budget planning and financial decision-making.
+- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (Python 3.10+)
+- **Templating**: Jinja2
+- **Frontend**: Single-Page HTML5 + [Tailwind CSS](https://tailwindcss.com/) (CDN)
+- **Charts & Visuals**: [Chart.js](https://www.chartjs.org/) + [Lucide Icons](https://lucide.dev/)
+- **Design Mode**: Dark mode aesthetic with emerald accents, glanceable typography, and touch-friendly kiosk UI
 
-## Features
+---
 
-- 📊 **Interactive Charts & Metrics**: Visual breakdown of income, expenses, and net savings.
-- 🎯 **Budget Goals**: Set, track, and receive notifications or warnings on budget thresholds.
-- 🔄 **Submodule Integration**: Seamlessly pulls data from and interacts with core Chespin services.
+## 📁 Project Structure
 
-## Getting Started
-
-### Prerequisites
-
-Ensure you have cloned the parent repository recursively if working within the complete Chespin project:
-
-```bash
-git clone --recurse-submodules <chespin-repo-url>
+```
+chespin-dashboard/
+├── requirements.txt         # FastAPI, Uvicorn, Jinja2, Pydantic
+├── run.py                   # CLI runner script
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app setup, static/template mounting
+│   ├── config.py            # Dashboard settings & environment variables
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   └── api.py           # REST API endpoints (summary, categories, trends, transactions, system status)
+│   ├── static/
+│   │   ├── css/
+│   │   │   └── style.css    # Custom styles, glassmorphism, animations, kiosk tweaks
+│   │   └── js/
+│   │       └── app.js       # Frontend controller, Chart.js managers, live clock & polling
+│   └── templates/
+│       └── index.html       # Single-page kiosk interface
+└── README.md
 ```
 
-Or if cloning this submodule independently:
+---
+
+## 🚀 Getting Started
+
+### 1. Install Dependencies
+
+Navigate to the `chespin-dashboard` directory and install the requirements:
 
 ```bash
-git clone https://github.com/saulxy/chespin-dashboard.git
+pip install -r requirements.txt
 ```
 
-### Installation & Running
+### 2. Start the Local Server
 
-> *Note: Setup instructions will be updated as dependencies and the build system are established.*
+Run the dashboard using the included `run.py` script:
 
 ```bash
-# Example setup (adjust based on selected package manager / runtime)
-npm install
-npm run dev
+python run.py --reload
 ```
 
-## Contributing & Development
+Or directly via `uvicorn`:
 
-This repository is maintained as part of the Chespin ecosystem. Please refer to the main repository for general contribution guidelines and architecture details.
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Then open your browser and navigate to:
+```
+http://localhost:8000
+```
+
+---
+
+## 🖥 Kiosk Mode Deployment
+
+### Running Fullscreen on Raspberry Pi / Linux
+
+To launch Chromium in dedicated kiosk mode pointing to the local dashboard upon boot:
+
+```bash
+chromium-browser --kiosk --noerrdialogs --disable-infobars --check-for-update-interval=31536000 http://localhost:8000
+```
+
+### Running on Windows / Desktop
+
+Press the **Fullscreen button** on the top header, or press <kbd>F11</kbd> in your browser to toggle native kiosk fullscreen mode.
+
+---
+
+## 📡 API Endpoints
+
+The dashboard exposes RESTful endpoints for integration with the core Chespin engine:
+
+- `GET /api/v1/summary`: High-level monthly budget, total spend, savings rate, and daily average.
+- `GET /api/v1/expenses/categories`: Spending breakdown by category with budget caps.
+- `GET /api/v1/expenses/trends`: Cumulative 14-day spending vs. budget target curve.
+- `GET /api/v1/transactions/recent`: Recent transaction records.
+- `GET /api/v1/system/status`: Device diagnostics, uptime, and Chespin wake word status.
+- `GET /health`: Watchdog health check.
