@@ -11,6 +11,8 @@ router = APIRouter(prefix="/api/v1", tags=["Dashboard API"])
 
 
 class MetricSummary(BaseModel):
+    id: Optional[int] = None
+    running_month: Optional[str] = None
     monthly_budget: float
     total_spent: float
     remaining_budget: float
@@ -20,6 +22,16 @@ class MetricSummary(BaseModel):
     daily_average: float
     days_left_in_month: int
     spending_status: str  # "on_track", "warning", "exceeded"
+    updated_at: Optional[str] = None
+
+
+class MetricSummaryUpdate(BaseModel):
+    monthly_budget: Optional[float] = None
+    total_spent: Optional[float] = None
+    savings_target: Optional[float] = None
+    savings_current: Optional[float] = None
+    running_month: Optional[str] = None
+
 
 
 class CategoryExpense(BaseModel):
@@ -68,15 +80,24 @@ class SystemStatus(BaseModel):
 
 
 @router.get("/summary", response_model=MetricSummary)
-async def get_summary() -> MetricSummary:
-    """Return high-level budget overview and KPI statistics from SQLite."""
-    data = database.get_metric_summary()
+async def get_summary(
+    month: Optional[str] = None,
+    year: Optional[str] = None,
+) -> MetricSummary:
+    """Return high-level budget overview and KPI statistics from SQLite.
+    
+    Optionally filters by month (e.g. '08') and year (e.g. '2026').
+    Defaults to current month if unspecified.
+    """
+    data = database.get_metric_summary(month=month, year=year)
     if not data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Metric summary not found",
         )
     return MetricSummary(
+        id=data.get("id"),
+        running_month=data.get("running_month"),
         monthly_budget=data["monthly_budget"],
         total_spent=data["total_spent"],
         remaining_budget=data["remaining_budget"],
@@ -86,7 +107,46 @@ async def get_summary() -> MetricSummary:
         daily_average=data["daily_average"],
         days_left_in_month=data["days_left_in_month"],
         spending_status=data["spending_status"],
+        updated_at=data.get("updated_at"),
     )
+
+
+@router.put("/summary", response_model=MetricSummary)
+async def update_summary(summary_update: MetricSummaryUpdate) -> MetricSummary:
+    """Update or recalculate budget metric summary for a running month."""
+    # Determine target month/year
+    month_val = summary_update.running_month[5:7] if summary_update.running_month and len(summary_update.running_month) >= 7 else None
+    year_val = summary_update.running_month[:4] if summary_update.running_month and len(summary_update.running_month) >= 4 else None
+
+    current = database.get_metric_summary(month=month_val, year=year_val) or {}
+    
+    monthly_budget = summary_update.monthly_budget if summary_update.monthly_budget is not None else current.get("monthly_budget", 3500.0)
+    total_spent = summary_update.total_spent if summary_update.total_spent is not None else current.get("total_spent", 0.0)
+    savings_target = summary_update.savings_target if summary_update.savings_target is not None else current.get("savings_target", 800.0)
+    savings_current = summary_update.savings_current if summary_update.savings_current is not None else current.get("savings_current", 0.0)
+
+    updated = database.update_metric_summary(
+        monthly_budget=monthly_budget,
+        total_spent=total_spent,
+        savings_target=savings_target,
+        savings_current=savings_current,
+        running_month=summary_update.running_month,
+    )
+    return MetricSummary(
+        id=updated.get("id"),
+        running_month=updated.get("running_month"),
+        monthly_budget=updated["monthly_budget"],
+        total_spent=updated["total_spent"],
+        remaining_budget=updated["remaining_budget"],
+        savings_target=updated["savings_target"],
+        savings_current=updated["savings_current"],
+        savings_rate=updated["savings_rate"],
+        daily_average=updated["daily_average"],
+        days_left_in_month=updated["days_left_in_month"],
+        spending_status=updated["spending_status"],
+        updated_at=updated.get("updated_at"),
+    )
+
 
 
 @router.get("/expenses/categories", response_model=List[CategoryExpense])

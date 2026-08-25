@@ -41,7 +41,8 @@ def run_tests():
     summary = get_metric_summary()
     assert summary is not None
     assert summary["monthly_budget"] == 3500.00
-    print(f"[PASS] Metric summary: {summary['spending_status']}, remaining: ${summary['remaining_budget']}")
+    assert "running_month" in summary
+    print(f"[PASS] Metric summary for {summary['running_month']}: {summary['spending_status']}, remaining: ${summary['remaining_budget']}")
 
     categories = get_category_expenses()
     assert len(categories) == 6
@@ -62,7 +63,31 @@ def run_tests():
         assert r.status_code == 200, f"Summary failed: {r.text}"
         data = r.json()
         assert data["monthly_budget"] == 3500.00
-        print(f"[PASS] GET /api/v1/summary returned 200: {data['spending_status']}")
+        assert data.get("running_month") is not None
+        print(f"[PASS] GET /api/v1/summary returned 200: {data['spending_status']} (running_month: {data['running_month']})")
+
+        # Test Summary with Query Params
+        r = client.get("/api/v1/summary?month=08&year=2026")
+        assert r.status_code == 200, f"Summary filter failed: {r.text}"
+        data_filtered = r.json()
+        assert data_filtered["monthly_budget"] == 3500.00
+        print(f"[PASS] GET /api/v1/summary?month=08&year=2026 returned 200: {data_filtered['running_month']}")
+
+        # Test Summary Update
+        r = client.put(
+            "/api/v1/summary",
+            json={
+                "monthly_budget": 4000.00,
+                "total_spent": 1900.00,
+                "savings_target": 900.00,
+                "savings_current": 700.00,
+            },
+        )
+        assert r.status_code == 200, f"Update summary failed: {r.text}"
+        data_updated = r.json()
+        assert data_updated["monthly_budget"] == 4000.00
+        print(f"[PASS] PUT /api/v1/summary returned 200: updated budget to {data_updated['monthly_budget']}")
+
 
         # Test Categories
         r = client.get("/api/v1/expenses/categories")

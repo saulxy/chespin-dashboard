@@ -1,9 +1,3 @@
-"""SQLite Database Management Module for Chespin Dashboard.
-
-Manages data persistence for MetricSummary, CategoryExpense, SpendingTrendPoint,
-and Transaction entities.
-"""
-
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -46,7 +40,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS metric_summary (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            running_month TEXT NOT NULL DEFAULT (DATE('now')),
             monthly_budget REAL NOT NULL,
             total_spent REAL NOT NULL,
             remaining_budget REAL NOT NULL,
@@ -60,6 +55,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+
 
     # 2. Category Expenses Table
     cursor.execute(
@@ -135,15 +131,19 @@ def seed_default_data(conn: sqlite3.Connection, force: bool = False) -> None:
         else:
             spending_status = "exceeded"
 
+        if force:
+            cursor.execute("DELETE FROM metric_summary;")
+
         cursor.execute(
             """
-            INSERT OR REPLACE INTO metric_summary (
-                id, monthly_budget, total_spent, remaining_budget,
+            INSERT INTO metric_summary (
+                running_month, monthly_budget, total_spent, remaining_budget,
                 savings_target, savings_current, savings_rate,
                 daily_average, days_left_in_month, spending_status, updated_at
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'));
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'));
             """,
             (
+                now.strftime("%Y-%m-%d"),
                 monthly_budget,
                 total_spent,
                 remaining_budget,
@@ -289,12 +289,37 @@ def init_db(db_path: Optional[str] = None, seed: bool = True) -> None:
 # Data Access Layer / CRUD Helpers
 # ==========================================
 
-def get_metric_summary(db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Retrieve the latest MetricSummary record."""
+def get_metric_summary(
+    month: Optional[str] = None,
+    year: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Retrieve MetricSummary record for a specific month/year or the latest current month."""
     with get_db(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM metric_summary WHERE id = 1;")
+        c_month = month or datetime.now().strftime("%m")
+        c_year = year or datetime.now().strftime("%Y")
+        
+        # Ensure 2-digit month
+        if len(c_month) == 1:
+            c_month = f"0{c_month}"
+
+        cursor.execute(
+            """
+            SELECT * FROM metric_summary
+            WHERE strftime('%m', running_month) = ? AND strftime('%Y', running_month) = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1;
+            """,
+            (c_month, c_year),
+        )
         row = cursor.fetchone()
+        
+        # If no specific record for the given month, fallback to the latest available summary
+        if not row:
+            cursor.execute("SELECT * FROM metric_summary ORDER BY running_month DESC, id DESC LIMIT 1;")
+            row = cursor.fetchone()
+
         if not row:
             return None
         return dict(row)
@@ -305,14 +330,23 @@ def update_metric_summary(
     total_spent: float,
     savings_target: float,
     savings_current: float,
+    running_month: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Recalculate and update the MetricSummary row."""
+    """Recalculate and update/insert the MetricSummary row for a specific running_month."""
     now = datetime.now()
-    next_month = now.replace(day=28) + timedelta(days=4)
+    target_month = running_month or now.strftime("%Y-%m-%d")
+    
+    # Try parsing running_month to compute days left & elapsed
+    try:
+        month_dt = datetime.strptime(target_month[:10], "%Y-%m-%d")
+    except Exception:
+        month_dt = now
+
+    next_month = month_dt.replace(day=28) + timedelta(days=4)
     last_day_of_month = next_month - timedelta(days=next_month.day)
-    days_left = max(1, (last_day_of_month - now).days)
-    days_elapsed = max(1, now.day)
+    days_left = max(1, (last_day_of_month - month_dt).days)
+    days_elapsed = max(1, month_dt.day)
 
     remaining_budget = monthly_budget - total_spent
     savings_rate = (
@@ -330,29 +364,75 @@ def update_metric_summary(
     else:
         spending_status = "exceeded"
 
+    c_month = month_dt.strftime("%m")
+    c_year = month_dt.strftime("%Y")
+
     with get_db(db_path) as conn:
         cursor = conn.cursor()
+        # Check if record for this month exists
         cursor.execute(
             """
-            INSERT OR REPLACE INTO metric_summary (
-                id, monthly_budget, total_spent, remaining_budget,
-                savings_target, savings_current, savings_rate,
-                daily_average, days_left_in_month, spending_status, updated_at
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'));
+            SELECT id FROM metric_summary
+            WHERE strftime('%m', running_month) = ? AND strftime('%Y', running_month) = ?
+            ORDER BY id DESC LIMIT 1;
             """,
-            (
-                monthly_budget,
-                total_spent,
-                remaining_budget,
-                savings_target,
-                savings_current,
-                savings_rate,
-                daily_average,
-                days_left,
-                spending_status,
-            ),
+            (c_month, c_year),
         )
-    return get_metric_summary(db_path) or {}
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.execute(
+                """
+                UPDATE metric_summary
+                SET monthly_budget = ?,
+                    total_spent = ?,
+                    remaining_budget = ?,
+                    savings_target = ?,
+                    savings_current = ?,
+                    savings_rate = ?,
+                    daily_average = ?,
+                    days_left_in_month = ?,
+                    spending_status = ?,
+                    updated_at = DATETIME('now')
+                WHERE id = ?;
+                """,
+                (
+                    monthly_budget,
+                    total_spent,
+                    remaining_budget,
+                    savings_target,
+                    savings_current,
+                    savings_rate,
+                    daily_average,
+                    days_left,
+                    spending_status,
+                    existing["id"],
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO metric_summary (
+                    running_month, monthly_budget, total_spent, remaining_budget,
+                    savings_target, savings_current, savings_rate,
+                    daily_average, days_left_in_month, spending_status, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'));
+                """,
+                (
+                    target_month,
+                    monthly_budget,
+                    total_spent,
+                    remaining_budget,
+                    savings_target,
+                    savings_current,
+                    savings_rate,
+                    daily_average,
+                    days_left,
+                    spending_status,
+                ),
+            )
+            
+    return get_metric_summary(month=c_month, year=c_year, db_path=db_path) or {}
 
 
 def get_category_expenses(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -432,16 +512,18 @@ def add_transaction(
             (amount, category),
         )
 
-        # Update metric summary total_spent
+        # Update metric summary total_spent for the running month
+        c_month = datetime.now().strftime("%m")
+        c_year = datetime.now().strftime("%Y")
         cursor.execute(
             """
             UPDATE metric_summary
             SET total_spent = total_spent + ?,
                 remaining_budget = monthly_budget - (total_spent + ?),
                 updated_at = DATETIME('now')
-            WHERE id = 1;
+            WHERE strftime('%m', running_month) = ? AND strftime('%Y', running_month) = ?;
             """,
-            (amount, amount),
+            (amount, amount, c_month, c_year),
         )
 
     return {
@@ -453,3 +535,4 @@ def add_transaction(
         "payment_method": payment_method,
         "icon": icon,
     }
+
