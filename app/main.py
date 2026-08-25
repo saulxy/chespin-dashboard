@@ -1,5 +1,6 @@
 """FastAPI Main Entrypoint for Chespin Local Dashboard."""
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,15 +9,26 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
+from app.database import init_db
 from app.routers.api import router as api_router
 
 BASE_DIR = Path(__file__).resolve().parent
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan context: initialize SQLite database on startup."""
+    init_db()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Local Kiosk Web Dashboard for Chespin Personal Budget & Audio Hub",
+    lifespan=lifespan,
 )
+
 
 # CORS middleware for local kiosk access & external network viewers
 app.add_middleware(

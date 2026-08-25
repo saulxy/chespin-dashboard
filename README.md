@@ -7,6 +7,7 @@ A local, single-page web dashboard and submodule of the [chespin](https://github
 ## 🛠 Tech Stack
 
 - **Backend**: [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (Python 3.10+)
+- **Database**: SQLite3 (persistent budget, categories, trends, and transactions)
 - **Templating**: Jinja2
 - **Frontend**: Single-Page HTML5 + [Tailwind CSS](https://tailwindcss.com/) (CDN)
 - **Charts & Visuals**: [Chart.js](https://www.chartjs.org/) + [Lucide Icons](https://lucide.dev/)
@@ -20,10 +21,12 @@ A local, single-page web dashboard and submodule of the [chespin](https://github
 chespin-dashboard/
 ├── requirements.txt         # FastAPI, Uvicorn, Jinja2, Pydantic
 ├── run.py                   # CLI runner script
+├── init_db.py               # Database initialization & seeding script
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI app setup, static/template mounting
+│   ├── main.py              # FastAPI app setup, static/template mounting, DB lifespan
 │   ├── config.py            # Dashboard settings & environment variables
+│   ├── database.py          # SQLite database connection, tables, seeders, CRUD helpers
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   └── api.py           # REST API endpoints (summary, categories, trends, transactions, system status)
