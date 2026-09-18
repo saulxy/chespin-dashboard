@@ -3,7 +3,6 @@
  */
 
 // Global Chart Instances
-let trendsChart = null;
 let categoryChart = null;
 let pollTimer = null;
 const REFRESH_INTERVAL_MS = (window.CHspin_CONFIG?.refreshInterval || 30) * 1000;
@@ -56,9 +55,98 @@ async function fetchSummary() {
     const totalSpentElem = document.getElementById('metric-total-spent');
     if (totalSpentElem) totalSpentElem.textContent = formatCurrency(data.total_spent);
 
-    // Remaining Budget
+    // Active Month Label (always current month based on system date)
+    const activeMonthElem = document.getElementById('metric-active-month');
+    if (activeMonthElem) {
+      const now = new Date();
+      activeMonthElem.textContent = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    // Remaining Budget & Color Indicator
     const remainingElem = document.getElementById('metric-remaining-budget');
     if (remainingElem) remainingElem.textContent = formatCurrency(data.remaining_budget);
+
+    const daysLeftElem = document.getElementById('metric-days-left');
+    if (daysLeftElem) daysLeftElem.textContent = `${data.days_left_in_month} days left`;
+
+    // Calculate remaining percentage
+    const monthlyBudget = Number(data.monthly_budget) || 1;
+    const remainingBudget = Number(data.remaining_budget) || 0;
+    const remainingPercent = Math.max(0, Math.min(100, Math.round((remainingBudget / monthlyBudget) * 100)));
+
+    const remainingPercentElem = document.getElementById('metric-remaining-percent');
+    if (remainingPercentElem) remainingPercentElem.textContent = `${remainingPercent}%`;
+
+    const remainingBadge = document.getElementById('remaining-status-badge');
+    const remainingDot = document.getElementById('remaining-status-dot');
+    const remainingBar = document.getElementById('remaining-color-bar');
+
+    if (remainingBar) {
+      remainingBar.style.width = `${remainingPercent}%`;
+    }
+
+    // Color Indicator States:
+    // 100% - 80%  -> Green
+    // > 80% - 50% -> Yellow
+    // > 50% - 20% -> Orange
+    // < 20%       -> Red
+    if (remainingPercent >= 80) {
+      // Green
+      if (remainingBadge) {
+        remainingBadge.className = "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30";
+      }
+      if (remainingDot) {
+        remainingDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+      }
+      if (remainingBar) {
+        remainingBar.className = "progress-bar-fill h-full bg-emerald-500 rounded-full";
+      }
+      if (remainingElem) {
+        remainingElem.className = "text-3xl sm:text-4xl font-bold font-mono tracking-tight text-emerald-400";
+      }
+    } else if (remainingPercent >= 50) {
+      // Yellow
+      if (remainingBadge) {
+        remainingBadge.className = "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/30";
+      }
+      if (remainingDot) {
+        remainingDot.className = "w-2 h-2 rounded-full bg-yellow-400";
+      }
+      if (remainingBar) {
+        remainingBar.className = "progress-bar-fill h-full bg-yellow-400 rounded-full";
+      }
+      if (remainingElem) {
+        remainingElem.className = "text-3xl sm:text-4xl font-bold font-mono tracking-tight text-yellow-400";
+      }
+    } else if (remainingPercent >= 20) {
+      // Orange
+      if (remainingBadge) {
+        remainingBadge.className = "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/30";
+      }
+      if (remainingDot) {
+        remainingDot.className = "w-2 h-2 rounded-full bg-orange-400";
+      }
+      if (remainingBar) {
+        remainingBar.className = "progress-bar-fill h-full bg-orange-400 rounded-full";
+      }
+      if (remainingElem) {
+        remainingElem.className = "text-3xl sm:text-4xl font-bold font-mono tracking-tight text-orange-400";
+      }
+    } else {
+      // Red (< 20%)
+      if (remainingBadge) {
+        remainingBadge.className = "inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30";
+      }
+      if (remainingDot) {
+        remainingDot.className = "w-2 h-2 rounded-full bg-rose-400 animate-pulse";
+      }
+      if (remainingBar) {
+        remainingBar.className = "progress-bar-fill h-full bg-rose-500 rounded-full";
+      }
+      if (remainingElem) {
+        remainingElem.className = "text-3xl sm:text-4xl font-bold font-mono tracking-tight text-rose-400";
+      }
+    }
 
     // Monthly Budget Total
     const budgetElem = document.getElementById('metric-monthly-budget');
@@ -76,9 +164,6 @@ async function fetchSummary() {
     // Daily Average
     const dailyAvgElem = document.getElementById('metric-daily-average');
     if (dailyAvgElem) dailyAvgElem.textContent = formatCurrency(data.daily_average);
-
-    const daysLeftElem = document.getElementById('metric-days-left');
-    if (daysLeftElem) daysLeftElem.textContent = `${data.days_left_in_month} days left`;
 
     // Overall Progress Bar
     const spentPercent = Math.min(100, Math.round((data.total_spent / data.monthly_budget) * 100));
@@ -119,11 +204,18 @@ async function fetchSummary() {
   }
 }
 
-// Fetch and Render Category Expense Breakdown
+// Fetch and Render Monthly Expense Breakdown
 async function fetchCategories() {
+  const categoryList = document.getElementById('category-progress-list');
+  const ctx = document.getElementById('categoriesChart')?.getContext('2d');
+  if (!categoryList && !ctx) return;
+
   try {
-    const res = await fetch('/api/v1/expenses/categories');
-    if (!res.ok) throw new Error('Failed to fetch categories');
+    let res = await fetch('/api/v1/expenses/monthly');
+    if (!res.ok) {
+      res = await fetch('/api/v1/expenses/categories');
+    }
+    if (!res.ok) throw new Error('Failed to fetch monthly expenses');
     const categories = await res.json();
 
     // Render Category Progress List
@@ -210,136 +302,17 @@ async function fetchCategories() {
   }
 }
 
-// Fetch and Render Trends Line Chart
-async function fetchTrends() {
-  try {
-    const res = await fetch('/api/v1/expenses/trends');
-    if (!res.ok) throw new Error('Failed to fetch trends');
-    const points = await res.json();
-
-    const ctx = document.getElementById('trendsChart')?.getContext('2d');
-    if (!ctx) return;
-
-    const labels = points.map(p => p.date);
-    const spentData = points.map(p => p.spent);
-    const paceData = points.map(p => p.budget_pace);
-
-    // Gradient fill for spent curve
-    const gradient = ctx.createLinearGradient(0, 0, 0, 240);
-    gradient.addColorStop(0, 'rgba(106, 141, 115, 0.40)');
-    gradient.addColorStop(1, 'rgba(228, 255, 225, 0.00)');
-
-    if (trendsChart) {
-      trendsChart.data.labels = labels;
-      trendsChart.data.datasets[0].data = spentData;
-      trendsChart.data.datasets[1].data = paceData;
-      trendsChart.update();
-    } else {
-      trendsChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Actual Spend',
-              data: spentData,
-              borderColor: '#6A8D73',
-              backgroundColor: gradient,
-              fill: true,
-              tension: 0.38,
-              pointBackgroundColor: '#6A8D73',
-              pointBorderColor: '#0d1511',
-              pointBorderWidth: 2,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-            },
-            {
-              label: 'Budget Pace',
-              data: paceData,
-              borderColor: 'rgba(148, 163, 184, 0.45)',
-              borderDash: [5, 5],
-              borderWidth: 2,
-              pointRadius: 0,
-              fill: false,
-              tension: 0.2,
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
-          scales: {
-            x: {
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)',
-                drawBorder: false,
-              },
-              ticks: {
-                color: '#94a3b8',
-                font: { size: 11 },
-                maxRotation: 0,
-              }
-            },
-            y: {
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)',
-                drawBorder: false,
-              },
-              ticks: {
-                color: '#94a3b8',
-                font: { size: 11 },
-                callback: function(val) {
-                  return '$' + val;
-                }
-              }
-            }
-          },
-          plugins: {
-            legend: {
-              position: 'top',
-              align: 'end',
-              labels: {
-                boxWidth: 12,
-                boxHeight: 12,
-                color: '#cbd5e1',
-                font: { size: 12, family: 'system-ui' }
-              }
-            },
-            tooltip: {
-              backgroundColor: 'rgba(15, 23, 42, 0.95)',
-              titleColor: '#f3f4f6',
-              bodyColor: '#e2e8f0',
-              borderColor: 'rgba(255, 255, 255, 0.1)',
-              borderWidth: 1,
-              padding: 12,
-              callbacks: {
-                label: function(context) {
-                  return ` ${context.dataset.label}: ${formatCurrency(context.raw)}`;
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-  } catch (err) {
-    console.error('Error loading trends:', err);
-  }
-}
 
 // Fetch and Render Recent Transactions
 async function fetchTransactions() {
+  const container = document.getElementById('recent-transactions-list');
+  if (!container) return;
+
   try {
     const res = await fetch('/api/v1/transactions/recent');
     if (!res.ok) throw new Error('Failed to fetch transactions');
     const transactions = await res.json();
 
-    const container = document.getElementById('recent-transactions-list');
-    if (!container) return;
 
     container.innerHTML = transactions.map(tx => `
       <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-slate-700 transition duration-200">
@@ -409,10 +382,10 @@ async function refreshDashboard() {
   const refreshBtn = document.getElementById('manual-refresh-btn');
   if (refreshBtn) refreshBtn.classList.add('animate-spin');
 
-  await Promise.all([
+  // Use allSettled so one failing endpoint never blocks other dashboard sections
+  await Promise.allSettled([
     fetchSummary(),
     fetchCategories(),
-    fetchTrends(),
     fetchTransactions(),
     fetchSystemStatus()
   ]);
@@ -422,8 +395,8 @@ async function refreshDashboard() {
   }
 }
 
-// Initialize on DOM Loaded
-document.addEventListener('DOMContentLoaded', () => {
+// App Initialization
+function initDashboard() {
   // Start clock
   updateClock();
   setInterval(updateClock, 1000);
@@ -450,4 +423,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) {
     lucide.createIcons();
   }
-});
+}
+
+// Ensure init executes even if script loads after DOMContentLoaded fired
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDashboard);
+} else {
+  initDashboard();
+}
+

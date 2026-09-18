@@ -34,19 +34,20 @@ class MetricSummaryUpdate(BaseModel):
 
 
 
-class CategoryExpense(BaseModel):
+class MonthlyExpense(BaseModel):
+    id: Optional[int] = None
     name: str
-    amount: float
+    amount: Optional[float] = 0.0
     budget: float
-    percentage: float
-    color: str
+    percentage: Optional[float] = 0.0
+    color: Optional[str] = "#6A8D73"
     icon: str
+    expense_date: Optional[str] = None
 
 
-class SpendingTrendPoint(BaseModel):
-    date: str
-    spent: float
-    budget_pace: float
+CategoryExpense = MonthlyExpense  # Backward-compatible alias
+
+
 
 
 class Transaction(BaseModel):
@@ -149,18 +150,15 @@ async def update_summary(summary_update: MetricSummaryUpdate) -> MetricSummary:
 
 
 
-@router.get("/expenses/categories", response_model=List[CategoryExpense])
-async def get_category_expenses() -> List[CategoryExpense]:
-    """Return category-wise expense breakdown with budget thresholds from SQLite."""
+@router.get("/expenses/monthly", response_model=List[MonthlyExpense])
+@router.get("/expenses/categories", response_model=List[MonthlyExpense])
+async def get_monthly_expenses() -> List[MonthlyExpense]:
+    """Return monthly expense breakdown with budget thresholds from SQLite."""
     items = database.get_category_expenses()
-    return [CategoryExpense(**item) for item in items]
+    return [MonthlyExpense(**item) for item in items]
 
 
-@router.get("/expenses/trends", response_model=List[SpendingTrendPoint])
-async def get_spending_trends() -> List[SpendingTrendPoint]:
-    """Return cumulative daily spending trend across the last 14 days from SQLite."""
-    items = database.get_spending_trends()
-    return [SpendingTrendPoint(**item) for item in items]
+
 
 
 @router.get("/transactions/recent", response_model=List[Transaction])

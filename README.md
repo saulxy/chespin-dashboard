@@ -7,7 +7,7 @@ A local, single-page web dashboard and submodule of the [chespin](https://github
 ## 🛠 Tech Stack
 
 - **Backend**: [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (Python 3.10+)
-- **Database**: SQLite3 (persistent budget, categories, trends, and transactions)
+- **Database**: SQLite3 (persistent budget, categories, and transactions)
 - **Templating**: Jinja2
 - **Frontend**: Single-Page HTML5 + [Tailwind CSS](https://tailwindcss.com/) (CDN)
 - **Charts & Visuals**: [Chart.js](https://www.chartjs.org/) + [Lucide Icons](https://lucide.dev/)
@@ -29,7 +29,7 @@ chespin-dashboard/
 │   ├── database.py          # SQLite database connection, tables, seeders, CRUD helpers
 │   ├── routers/
 │   │   ├── __init__.py
-│   │   └── api.py           # REST API endpoints (summary, categories, trends, transactions, system status)
+│   │   └── api.py           # REST API endpoints (summary, categories, transactions, system status)
 │   ├── static/
 │   │   ├── css/
 │   │   │   └── style.css    # Custom styles, glassmorphism, animations, kiosk tweaks
@@ -94,8 +94,7 @@ Press the **Fullscreen button** on the top header, or press <kbd>F11</kbd> in yo
 The dashboard exposes RESTful endpoints for integration with the core Chespin engine:
 
 - `GET /api/v1/summary`: High-level monthly budget, total spend, savings rate, and daily average.
-- `GET /api/v1/expenses/categories`: Spending breakdown by category with budget caps.
-- `GET /api/v1/expenses/trends`: Cumulative 14-day spending vs. budget target curve.
+- `GET /api/v1/expenses/monthly`: Monthly expenses breakdown with budget caps.
 - `GET /api/v1/transactions/recent`: Recent transaction records.
 - `GET /api/v1/system/status`: Device diagnostics, uptime, and Chespin wake word status.
 - `GET /health`: Watchdog health check.
