@@ -597,6 +597,8 @@ function setupCrudModal() {
       document.getElementById('input-expense-color').value = '#6A8D73';
       document.getElementById('input-expense-color-hex').textContent = '#6A8D73';
       document.getElementById('input-expense-icon').value = 'credit-card';
+      const freqEl = document.getElementById('input-expense-frequency');
+      if (freqEl) freqEl.value = 'monthly';
 
       expenseFormContainer.classList.remove('hidden');
       if (window.lucide) lucide.createIcons();
@@ -874,6 +876,8 @@ async function loadMonthlyExpenses(filterMonth = '') {
             <div class="flex items-center space-x-2 text-xs text-slate-400 font-mono mt-0.5">
               <span>Date: ${exp.expense_date ? exp.expense_date.slice(0, 10) : 'N/A'}</span>
               <span>•</span>
+              <span class="capitalize text-slate-300">${exp.frequency || 'monthly'}</span>
+              <span>•</span>
               <span class="text-slate-300">${exp.percentage || 0}% of spend</span>
             </div>
           </div>
@@ -922,6 +926,8 @@ window.editMonthlyExpense = function(id) {
   document.getElementById('input-expense-color').value = exp.color || '#6A8D73';
   document.getElementById('input-expense-color-hex').textContent = exp.color || '#6A8D73';
   document.getElementById('input-expense-icon').value = exp.icon || 'credit-card';
+  const freqEl = document.getElementById('input-expense-frequency');
+  if (freqEl) freqEl.value = exp.frequency || 'monthly';
 
   container.classList.remove('hidden');
   container.scrollIntoView({ behavior: 'smooth' });
@@ -967,11 +973,14 @@ async function saveMonthlyExpense() {
   }
 
   const isUpdate = Boolean(id);
+  const freqInput = document.getElementById('input-expense-frequency');
+  const frequency = freqInput ? freqInput.value : 'monthly';
   const payload = {
     name,
     budget,
     amount,
     expense_date: date || null,
+    frequency,
     color,
     icon,
   };

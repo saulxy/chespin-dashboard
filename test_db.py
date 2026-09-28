@@ -92,6 +92,14 @@ def run_tests():
         assert sys_data["status"] == "Online"
         print(f"[PASS] GET /api/v1/system/status returned 200: {sys_data['device_name']}")
 
+        # Test Favicon Endpoints
+        r_ico = client.get("/favicon.ico")
+        assert r_ico.status_code == 200, f"Root /favicon.ico failed: {r_ico.status_code}"
+        assert len(r_ico.content) > 0
+        r_static = client.get("/static/favicon.ico")
+        assert r_static.status_code == 200, f"/static/favicon.ico failed: {r_static.status_code}"
+        print(f"[PASS] Favicon endpoints verified (/favicon.ico, /static/favicon.ico) - {len(r_ico.content)} bytes")
+
         # ----------------------------------------------------
         # Test Pre-load Expenses Option with No Data (Failure)
         # ----------------------------------------------------
@@ -169,7 +177,7 @@ def run_tests():
         # Test Monthly Expenses CRUD
         # ----------------------------------------------------
         print("\n=== Testing Monthly Expenses CRUD ===")
-        # 1. Create Monthly Expense
+        # 1. Create Monthly Expense with frequency
         new_exp_res = client.post(
             "/api/v1/expenses/monthly",
             json={
@@ -179,6 +187,7 @@ def run_tests():
                 "color": "#6A8D73",
                 "icon": "dumbbell",
                 "expense_date": "2026-09-12",
+                "frequency": "weekly",
             },
         )
         assert new_exp_res.status_code == 201, f"Create expense failed: {new_exp_res.text}"
@@ -186,22 +195,25 @@ def run_tests():
         exp_id = new_exp["id"]
         assert new_exp["name"] == "Gym Membership"
         assert new_exp["amount"] == 45.0
-        print(f"[PASS] Created monthly expense ID {exp_id} ({new_exp['name']}).")
+        assert new_exp.get("frequency") == "weekly", f"Expected frequency 'weekly', got: {new_exp.get('frequency')}"
+        print(f"[PASS] Created monthly expense ID {exp_id} ({new_exp['name']}) with frequency='{new_exp['frequency']}'.")
 
         # 2. Read single expense by ID
         get_exp_res = client.get(f"/api/v1/expenses/monthly/{exp_id}")
         assert get_exp_res.status_code == 200
         assert get_exp_res.json()["name"] == "Gym Membership"
-        print(f"[PASS] GET /api/v1/expenses/monthly/{exp_id} verified.")
+        assert get_exp_res.json().get("frequency") == "weekly"
+        print(f"[PASS] GET /api/v1/expenses/monthly/{exp_id} verified with frequency='weekly'.")
 
-        # 3. Update expense by ID
+        # 3. Update expense by ID (including frequency)
         up_exp_res = client.put(
             f"/api/v1/expenses/monthly/{exp_id}",
-            json={"amount": 55.0, "budget": 65.0},
+            json={"amount": 55.0, "budget": 65.0, "frequency": "biweekly"},
         )
         assert up_exp_res.status_code == 200
         assert up_exp_res.json()["amount"] == 55.0
-        print(f"[PASS] PUT /api/v1/expenses/monthly/{exp_id} updated amount to $55.0.")
+        assert up_exp_res.json().get("frequency") == "biweekly", f"Expected 'biweekly', got: {up_exp_res.json().get('frequency')}"
+        print(f"[PASS] PUT /api/v1/expenses/monthly/{exp_id} updated amount to $55.0 and frequency to 'biweekly'.")
 
         # 4. Delete expense by ID
         del_exp_res = client.delete(f"/api/v1/expenses/monthly/{exp_id}")
@@ -211,6 +223,40 @@ def run_tests():
 
         # Clean up any leftover 2026-11 test expenses
         for exp in nov_expenses:
+            client.delete(f"/api/v1/expenses/monthly/{exp['id']}")
+
+        # ----------------------------------------------------
+        # Test Preload Expenses Endpoint Only Copies 'monthly'
+        # ----------------------------------------------------
+        print("\n=== Testing Preload Expenses Endpoint Frequency Filtering ===")
+        # Seed test expenses in 2026-05: one monthly, one weekly, one one-time
+        e_monthly = client.post("/api/v1/expenses/monthly", json={
+            "name": "Monthly Netflix", "budget": 20.0, "amount": 20.0, "expense_date": "2026-05-01", "frequency": "monthly"
+        }).json()
+        e_weekly = client.post("/api/v1/expenses/monthly", json={
+            "name": "Weekly Groceries", "budget": 100.0, "amount": 90.0, "expense_date": "2026-05-07", "frequency": "weekly"
+        }).json()
+        e_onetime = client.post("/api/v1/expenses/monthly", json={
+            "name": "One-time Concert", "budget": 150.0, "amount": 150.0, "expense_date": "2026-05-15", "frequency": "one-time"
+        }).json()
+
+        # Call preload endpoint from 2026-05 into 2026-06
+        preload_res = client.post("/api/v1/metric-summary/preload-expenses", json={
+            "source_month": "2026-05",
+            "target_month": "2026-06",
+        })
+        assert preload_res.status_code == 200, f"Preload failed: {preload_res.text}"
+        preloaded_items = preload_res.json()
+        assert len(preloaded_items) == 1, f"Expected exactly 1 preloaded expense, got: {len(preloaded_items)}"
+        assert preloaded_items[0]["name"] == "Monthly Netflix"
+        assert preloaded_items[0]["frequency"] == "monthly"
+        print(f"[PASS] Preload expenses endpoint only copied monthly recurring expense: '{preloaded_items[0]['name']}' (ignored weekly & one-time).")
+
+        # Clean up test expenses in 2026-05 and 2026-06
+        client.delete(f"/api/v1/expenses/monthly/{e_monthly['id']}")
+        client.delete(f"/api/v1/expenses/monthly/{e_weekly['id']}")
+        client.delete(f"/api/v1/expenses/monthly/{e_onetime['id']}")
+        for exp in preloaded_items:
             client.delete(f"/api/v1/expenses/monthly/{exp['id']}")
 
     print("\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!")

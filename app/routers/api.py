@@ -51,6 +51,7 @@ class MetricSummaryUpdate(BaseModel):
 class PreloadExpensesRequest(BaseModel):
     source_month: str = Field(..., description="Month containing expense template, e.g. '2026-09'")
     target_month: str = Field(..., description="Target month to copy expenses to, e.g. '2026-10'")
+    frequency: Optional[str] = Field(default="monthly", description="Frequency filter for preloading (default: 'monthly')")
 
 
 # ==========================================
@@ -66,6 +67,7 @@ class MonthlyExpense(BaseModel):
     color: Optional[str] = "#6A8D73"
     icon: str = "credit-card"
     expense_date: Optional[str] = None
+    frequency: Optional[str] = "monthly"
 
 
 CategoryExpense = MonthlyExpense  # Backward-compatible alias
@@ -78,6 +80,7 @@ class MonthlyExpenseCreate(BaseModel):
     color: Optional[str] = Field(default="#6A8D73", description="Color HEX code")
     icon: Optional[str] = Field(default="credit-card", description="Lucide icon name")
     expense_date: Optional[str] = Field(default=None, description="Date of expense (YYYY-MM-DD)")
+    frequency: Optional[str] = Field(default="monthly", description="Expense frequency (e.g. monthly, weekly, biweekly, yearly, one-time)")
 
 
 class MonthlyExpenseUpdate(BaseModel):
@@ -87,6 +90,7 @@ class MonthlyExpenseUpdate(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
     expense_date: Optional[str] = None
+    frequency: Optional[str] = None
 
 
 # ==========================================
@@ -246,14 +250,16 @@ async def delete_metric_summary(id: int) -> Dict[str, Any]:
 
 @router.post("/metric-summary/preload-expenses", response_model=List[MonthlyExpense])
 async def preload_expenses_endpoint(payload: PreloadExpensesRequest) -> List[MonthlyExpense]:
-    """Copy expenses from a source month into a target month.
+    """Copy recurring expenses from a source month into a target month,
+    preloading only expenses whose frequency is 'monthly'.
     
-    If source month has no expenses, returns 400 asking to try again.
+    If source month has no matching monthly expenses, returns 400 asking to try again.
     """
     try:
         cloned = database.preload_monthly_expenses(
             source_month=payload.source_month,
             target_month=payload.target_month,
+            frequency=payload.frequency or "monthly",
         )
         return [MonthlyExpense(**item) for item in cloned]
     except ValueError as e:
@@ -297,6 +303,7 @@ async def create_monthly_expense(payload: MonthlyExpenseCreate) -> MonthlyExpens
         color=payload.color or "#6A8D73",
         icon=payload.icon or "credit-card",
         expense_date=payload.expense_date,
+        frequency=payload.frequency,
     )
     return MonthlyExpense(**item)
 
@@ -312,6 +319,7 @@ async def update_monthly_expense(id: int, payload: MonthlyExpenseUpdate) -> Mont
         color=payload.color,
         icon=payload.icon,
         expense_date=payload.expense_date,
+        frequency=payload.frequency,
     )
     if not updated:
         raise HTTPException(

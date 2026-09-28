@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -63,6 +63,12 @@ templates = Jinja2Templates(directory=str(templates_dir))
 
 # Include API Router
 app.include_router(api_router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Serve favicon directly at root path for browsers and external clients."""
+    return FileResponse(static_dir / "favicon.ico")
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -74,6 +74,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
             "color" TEXT,
             "icon" TEXT NOT NULL,
             "expense_date" DATETIME,
+            "frequency" TEXT(20) DEFAULT 'monthly',
             PRIMARY KEY("id" AUTOINCREMENT)
         );
         """
@@ -137,44 +138,23 @@ def seed_default_data(conn: sqlite3.Connection, force: bool = False) -> None:
         ]
         total = sum(c[1] for c in categories)
         cursor.execute(f"PRAGMA table_info({tbl});")
-        has_expense_date = "expense_date" in [r[1] for r in cursor.fetchall()]
+        cols = [r[1] for r in cursor.fetchall()]
+        has_expense_date = "expense_date" in cols
+        has_frequency = "frequency" in cols
 
-        if has_expense_date:
-            cursor.executemany(
-                f"""
-                INSERT INTO {tbl} (name, amount, budget, percentage, color, icon, expense_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        c[0],
-                        c[1],
-                        c[2],
-                        round((c[1] / total) * 100, 1),
-                        c[4],
-                        c[5],
-                        c[6],
-                    )
-                    for c in categories
-                ],
-            )
-        else:
-            cursor.executemany(
-                f"""
-                INSERT INTO {tbl} (name, amount, budget, percentage, color, icon)
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        c[0],
-                        c[1],
-                        c[2],
-                        round((c[1] / total) * 100, 1),
-                        c[4],
-                        c[5],
-                    )
-                    for c in categories
-                ],
+        for c in categories:
+            pct = round((c[1] / total) * 100, 1)
+            fields = ["name", "amount", "budget", "percentage", "color", "icon"]
+            vals = [c[0], c[1], c[2], pct, c[4], c[5]]
+            if has_expense_date:
+                fields.append("expense_date")
+                vals.append(c[6])
+            if has_frequency:
+                fields.append("frequency")
+                vals.append("monthly")
+            cursor.execute(
+                f"INSERT INTO {tbl} ({', '.join(fields)}) VALUES ({', '.join(['?'] * len(fields))});",
+                vals,
             )
 
 
@@ -464,10 +444,13 @@ def preload_monthly_expenses(
     source_month: str,
     target_month: str,
     db_path: Optional[str] = None,
+    frequency: Optional[str] = "monthly",
 ) -> List[Dict[str, Any]]:
     """Pre-load (clone) expenses from a source month into a target month.
     
-    If source month contains no expenses, raises ValueError asking the user to try again.
+    If frequency is provided (default 'monthly'), only preloads recurring expenses
+    matching that frequency (or legacy NULL entries when filtering for 'monthly').
+    If source month contains no matching expenses, raises ValueError asking the user to try again.
     """
     src_year, src_month = normalize_month_year(source_month)
     tgt_year, tgt_month = normalize_month_year(target_month)
@@ -478,20 +461,33 @@ def preload_monthly_expenses(
         cursor.execute(f"PRAGMA table_info({tbl});")
         cols = [r[1] for r in cursor.fetchall()]
         has_expense_date = "expense_date" in cols
+        has_frequency = "frequency" in cols
 
         # Query source expenses
+        select_cols = ["id", "name", "amount", "budget", "percentage", "color", "icon"]
         if has_expense_date:
-            cursor.execute(
-                f"""
-                SELECT id, name, amount, budget, percentage, color, icon, expense_date
-                FROM {tbl}
-                WHERE (strftime('%Y', expense_date) = ? AND strftime('%m', expense_date) = ?)
-                   OR expense_date LIKE ?;
-                """,
-                (src_year, src_month, f"{src_year}-{src_month}%"),
+            select_cols.append("expense_date")
+        if has_frequency:
+            select_cols.append("frequency")
+        col_str = ", ".join(select_cols)
+
+        where_clauses = []
+        params = []
+
+        if has_expense_date:
+            where_clauses.append(
+                "((strftime('%Y', expense_date) = ? AND strftime('%m', expense_date) = ?) OR expense_date LIKE ?)"
             )
-        else:
-            cursor.execute(f"SELECT id, name, amount, budget, percentage, color, icon FROM {tbl};")
+            params.extend([src_year, src_month, f"{src_year}-{src_month}%"])
+
+        if has_frequency and frequency is not None:
+            where_clauses.append(
+                "(LOWER(frequency) = LOWER(?) OR (frequency IS NULL AND LOWER(?) = 'monthly'))"
+            )
+            params.extend([frequency, frequency])
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        cursor.execute(f"SELECT {col_str} FROM {tbl} {where_sql};", params)
 
         source_rows = cursor.fetchall()
         if not source_rows:
@@ -521,39 +517,29 @@ def preload_monthly_expenses(
             day = min(day, last_day)
             tgt_date_str = f"{tgt_year}-{tgt_month}-{day:02d}"
 
+            ins_cols = ["name", "amount", "budget", "percentage", "color", "icon"]
+            ins_vals = [
+                row_dict["name"],
+                row_dict.get("amount", 0.0),
+                row_dict["budget"],
+                row_dict.get("percentage", 0.0),
+                row_dict.get("color") or "#6A8D73",
+                row_dict.get("icon") or "credit-card",
+            ]
             if has_expense_date:
-                cursor.execute(
-                    f"""
-                    INSERT INTO {tbl} (name, amount, budget, percentage, color, icon, expense_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    (
-                        row_dict["name"],
-                        row_dict.get("amount", 0.0),
-                        row_dict["budget"],
-                        row_dict.get("percentage", 0.0),
-                        row_dict.get("color") or "#6A8D73",
-                        row_dict.get("icon") or "credit-card",
-                        tgt_date_str,
-                    ),
-                )
-            else:
-                cursor.execute(
-                    f"""
-                    INSERT INTO {tbl} (name, amount, budget, percentage, color, icon)
-                    VALUES (?, ?, ?, ?, ?, ?);
-                    """,
-                    (
-                        row_dict["name"],
-                        row_dict.get("amount", 0.0),
-                        row_dict["budget"],
-                        row_dict.get("percentage", 0.0),
-                        row_dict.get("color") or "#6A8D73",
-                        row_dict.get("icon") or "credit-card",
-                    ),
-                )
+                ins_cols.append("expense_date")
+                ins_vals.append(tgt_date_str)
+            if has_frequency:
+                ins_cols.append("frequency")
+                ins_vals.append(row_dict.get("frequency") or "monthly")
+
+            placeholders = ", ".join(["?"] * len(ins_cols))
+            cursor.execute(
+                f"INSERT INTO {tbl} ({', '.join(ins_cols)}) VALUES ({placeholders});",
+                ins_vals,
+            )
             new_id = cursor.lastrowid
-            new_expenses.append({
+            new_item = {
                 "id": new_id,
                 "name": row_dict["name"],
                 "amount": row_dict.get("amount", 0.0),
@@ -562,7 +548,10 @@ def preload_monthly_expenses(
                 "color": row_dict.get("color") or "#6A8D73",
                 "icon": row_dict.get("icon") or "credit-card",
                 "expense_date": tgt_date_str if has_expense_date else None,
-            })
+            }
+            if has_frequency:
+                new_item["frequency"] = row_dict.get("frequency") or "monthly"
+            new_expenses.append(new_item)
 
         # Recalculate percentages for target month
         _recalculate_expense_percentages(cursor, tbl, tgt_year, tgt_month)
@@ -804,6 +793,7 @@ def create_monthly_expense(
     color: Optional[str] = "#6A8D73",
     icon: Optional[str] = "credit-card",
     expense_date: Optional[str] = None,
+    frequency: Optional[str] = "monthly",
     db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a new MonthlyExpense record in the SQLite database."""
@@ -815,22 +805,22 @@ def create_monthly_expense(
         cursor.execute(f"PRAGMA table_info({tbl});")
         cols = [r[1] for r in cursor.fetchall()]
 
+        fields = ["name", "amount", "budget", "percentage", "color", "icon"]
+        values = [name, amount, budget, 0.0, color or "#6A8D73", icon or "credit-card"]
+
         if "expense_date" in cols:
-            cursor.execute(
-                f"""
-                INSERT INTO {tbl} (name, amount, budget, percentage, color, icon, expense_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
-                """,
-                (name, amount, budget, 0.0, color or "#6A8D73", icon or "credit-card", exp_date),
-            )
-        else:
-            cursor.execute(
-                f"""
-                INSERT INTO {tbl} (name, amount, budget, percentage, color, icon)
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                (name, amount, budget, 0.0, color or "#6A8D73", icon or "credit-card"),
-            )
+            fields.append("expense_date")
+            values.append(exp_date)
+
+        if "frequency" in cols:
+            fields.append("frequency")
+            values.append(frequency or "monthly")
+
+        placeholders = ", ".join(["?"] * len(fields))
+        cursor.execute(
+            f"INSERT INTO {tbl} ({', '.join(fields)}) VALUES ({placeholders});",
+            values,
+        )
         new_id = cursor.lastrowid
 
         y, m = normalize_month_year(exp_date)
@@ -847,22 +837,24 @@ def get_monthly_expense_by_id(expense_id: int, db_path: Optional[str] = None) ->
         cursor.execute(f"PRAGMA table_info({tbl});")
         cols = [r[1] for r in cursor.fetchall()]
 
+        select_cols = ["id", "name", "amount", "budget", "percentage", "color", "icon"]
         if "expense_date" in cols:
-            cursor.execute(
-                f"SELECT id, name, amount, budget, percentage, color, icon, expense_date FROM {tbl} WHERE id = ?;",
-                (expense_id,),
-            )
-        else:
-            cursor.execute(
-                f"SELECT id, name, amount, budget, percentage, color, icon FROM {tbl} WHERE id = ?;",
-                (expense_id,),
-            )
+            select_cols.append("expense_date")
+        if "frequency" in cols:
+            select_cols.append("frequency")
+
+        cursor.execute(
+            f"SELECT {', '.join(select_cols)} FROM {tbl} WHERE id = ?;",
+            (expense_id,),
+        )
         row = cursor.fetchone()
         if not row:
             return None
         res = dict(row)
         if res.get("amount") is None:
             res["amount"] = 0.0
+        if "frequency" in cols and res.get("frequency") is None:
+            res["frequency"] = "monthly"
         return res
 
 
@@ -878,13 +870,21 @@ def list_monthly_expenses(
         cursor.execute(f"PRAGMA table_info({tbl});")
         cols = [r[1] for r in cursor.fetchall()]
         has_expense_date = "expense_date" in cols
+        has_frequency = "frequency" in cols
+
+        select_cols = ["id", "name", "amount", "budget", "percentage", "color", "icon"]
+        if has_expense_date:
+            select_cols.append("expense_date")
+        if has_frequency:
+            select_cols.append("frequency")
+        col_str = ", ".join(select_cols)
 
         if month and year and has_expense_date:
             m = month.zfill(2)
             y = str(year)
             cursor.execute(
                 f"""
-                SELECT id, name, amount, budget, percentage, color, icon, expense_date
+                SELECT {col_str}
                 FROM {tbl}
                 WHERE (strftime('%m', expense_date) = ? AND strftime('%Y', expense_date) = ?)
                    OR expense_date LIKE ?
@@ -892,13 +892,9 @@ def list_monthly_expenses(
                 """,
                 (m, y, f"{y}-{m}%"),
             )
-        elif has_expense_date:
-            cursor.execute(
-                f"SELECT id, name, amount, budget, percentage, color, icon, expense_date FROM {tbl} ORDER BY id ASC;"
-            )
         else:
             cursor.execute(
-                f"SELECT id, name, amount, budget, percentage, color, icon FROM {tbl} ORDER BY id ASC;"
+                f"SELECT {col_str} FROM {tbl} ORDER BY id ASC;"
             )
 
         rows = cursor.fetchall()
@@ -911,6 +907,8 @@ def list_monthly_expenses(
                 c["amount"] = 0.0
             if not c.get("color"):
                 c["color"] = "#6A8D73"
+            if has_frequency and c.get("frequency") is None:
+                c["frequency"] = "monthly"
 
         total = sum(c["amount"] for c in categories)
         for c in categories:
@@ -936,6 +934,7 @@ def update_monthly_expense(
     color: Optional[str] = None,
     icon: Optional[str] = None,
     expense_date: Optional[str] = None,
+    frequency: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Update an existing monthly expense record by ID."""
@@ -957,27 +956,30 @@ def update_monthly_expense(
         cursor.execute(f"PRAGMA table_info({tbl});")
         cols = [r[1] for r in cursor.fetchall()]
 
+        fields = ["name = ?", "budget = ?", "amount = ?", "color = ?", "icon = ?"]
+        params = [new_name, new_budget, new_amount, new_color, new_icon]
+
+        recalc_y, recalc_m = None, None
         if "expense_date" in cols:
             new_date = expense_date if expense_date is not None else current.get("expense_date")
-            cursor.execute(
-                f"""
-                UPDATE {tbl}
-                SET name = ?, budget = ?, amount = ?, color = ?, icon = ?, expense_date = ?
-                WHERE id = ?;
-                """,
-                (new_name, new_budget, new_amount, new_color, new_icon, new_date, expense_id),
-            )
-            y, m = normalize_month_year(new_date)
-            _recalculate_expense_percentages(cursor, tbl, y, m)
+            fields.append("expense_date = ?")
+            params.append(new_date)
+            recalc_y, recalc_m = normalize_month_year(new_date)
+
+        if "frequency" in cols:
+            new_frequency = frequency if frequency is not None else (current.get("frequency") or "monthly")
+            fields.append("frequency = ?")
+            params.append(new_frequency)
+
+        params.append(expense_id)
+        cursor.execute(
+            f"UPDATE {tbl} SET {', '.join(fields)} WHERE id = ?;",
+            params,
+        )
+
+        if recalc_y and recalc_m:
+            _recalculate_expense_percentages(cursor, tbl, recalc_y, recalc_m)
         else:
-            cursor.execute(
-                f"""
-                UPDATE {tbl}
-                SET name = ?, budget = ?, amount = ?, color = ?, icon = ?
-                WHERE id = ?;
-                """,
-                (new_name, new_budget, new_amount, new_color, new_icon, expense_id),
-            )
             _recalculate_expense_percentages(cursor, tbl)
 
     return get_monthly_expense_by_id(expense_id, db_path=db_path)
