@@ -30,7 +30,7 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"🌲 Starting Chespin Kiosk Dashboard on http://{args.host}:{args.port}")
+    print(f"Starting Chespin Kiosk Dashboard on http://{args.host}:{args.port}")
     uvicorn.run(
         "app.main:app",
         host=args.host,
