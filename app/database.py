@@ -926,6 +926,68 @@ def get_category_expenses(
     return list_monthly_expenses(month=month, year=year, db_path=db_path)
 
 
+def get_daily_expenses_timeline(
+    month: Optional[str] = None,
+    year: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Retrieve expenses for a given month aggregated by date for timeline visualization."""
+    """By default pulls data for current month & year"""
+    now = datetime.now()
+    month = month or now.strftime("%m")
+    year = year or now.strftime("%Y")
+
+    expenses = list_monthly_expenses(month=month, year=year, db_path=db_path)
+    if not expenses:
+        return []
+
+    daily_groups: Dict[str, Dict[str, Any]] = {}
+    for exp in expenses:
+        raw_date = exp.get("expense_date")
+        if not raw_date:
+            date_key = f"{year}-{str(month).zfill(2)}-01"
+        else:
+            date_key = str(raw_date)[:10]
+
+        if date_key not in daily_groups:
+            daily_groups[date_key] = {
+                "date": date_key,
+                "total_spent": 0.0,
+                "items": [],
+            }
+
+        amt = float(exp.get("amount") or 0.0)
+        daily_groups[date_key]["total_spent"] = round(daily_groups[date_key]["total_spent"] + amt, 2)
+        daily_groups[date_key]["items"].append({
+            "name": exp.get("name"),
+            "amount": amt,
+            "color": exp.get("color") or "#6A8D73",
+            "icon": exp.get("icon") or "credit-card",
+        })
+
+    timeline = []
+    for dt_key in sorted(daily_groups.keys()):
+        grp = daily_groups[dt_key]
+        try:
+            dt_obj = datetime.strptime(dt_key, "%Y-%m-%d")
+            formatted_date = dt_obj.strftime("%b %d")
+            day_num = dt_obj.day
+        except Exception:
+            formatted_date = dt_key
+            day_num = 1
+
+        timeline.append({
+            "date": dt_key,
+            "formatted_date": formatted_date,
+            "day": day_num,
+            "total_spent": grp["total_spent"],
+            "expense_count": len(grp["items"]),
+            "items": grp["items"],
+        })
+
+    return timeline
+
+
 def update_monthly_expense(
     expense_id: int,
     name: Optional[str] = None,

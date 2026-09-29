@@ -1,6 +1,7 @@
 """API endpoints providing budget data, metrics, and kiosk status."""
 
 from datetime import datetime
+import socket
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -91,6 +92,22 @@ class MonthlyExpenseUpdate(BaseModel):
     icon: Optional[str] = None
     expense_date: Optional[str] = None
     frequency: Optional[str] = None
+
+
+class DailyExpenseItem(BaseModel):
+    name: str
+    amount: float
+    color: Optional[str] = "#6A8D73"
+    icon: Optional[str] = "credit-card"
+
+
+class DailyExpensePoint(BaseModel):
+    date: str
+    formatted_date: str
+    day: int
+    total_spent: float
+    expense_count: int
+    items: List[DailyExpenseItem] = []
 
 
 # ==========================================
@@ -281,6 +298,17 @@ async def get_monthly_expenses(
     return [MonthlyExpense(**item) for item in items]
 
 
+@router.get("/expenses/timeline", response_model=List[DailyExpensePoint])
+@router.get("/expenses/monthly/timeline", response_model=List[DailyExpensePoint])
+async def get_expenses_timeline(
+    month: Optional[str] = None,
+    year: Optional[str] = None,
+) -> List[DailyExpensePoint]:
+    """Return daily grouped expenses of the month for timeline/graph visualization."""
+    items = database.get_daily_expenses_timeline(month=month, year=year)
+    return [DailyExpensePoint(**item) for item in items]
+
+
 @router.get("/expenses/monthly/{id}", response_model=MonthlyExpense)
 async def get_monthly_expense_by_id(id: int) -> MonthlyExpense:
     """Retrieve a single monthly expense record by ID."""
@@ -373,8 +401,9 @@ async def create_transaction(tx: TransactionCreate) -> Transaction:
 @router.get("/system/status", response_model=SystemStatus)
 async def get_system_status() -> SystemStatus:
     """Return dynamic kiosk device and synchronization health."""
+    hostname = socket.gethostname()
     return SystemStatus(
-        device_name="Chespin Hub (Raspberry Pi)",
+        device_name="Chespin-Hub@" + hostname,
         status="Online",
         uptime="98.9%",
         last_sync=datetime.now().strftime("%I:%M:%S %p"),

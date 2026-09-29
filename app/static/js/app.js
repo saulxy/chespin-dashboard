@@ -4,6 +4,7 @@
 
 // Global Chart Instances
 let categoryChart = null;
+let expensesTimelineChart = null;
 let pollTimer = null;
 const REFRESH_INTERVAL_MS = (window.CHspin_CONFIG?.refreshInterval || 30) * 1000;
 
@@ -303,6 +304,190 @@ async function fetchCategories() {
 }
 
 
+// Fetch and Render Daily Expenses Timeline Chart
+async function fetchExpensesTimeline(monthYear = null) {
+  const canvas = document.getElementById('monthlyExpensesTimelineChart');
+  if (!canvas) return;
+
+  try {
+    let url = '/api/v1/expenses/timeline';
+    if (monthYear) {
+      const [y, m] = monthYear.split('-');
+      url += `?month=${m}&year=${y}`;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch expenses timeline');
+    const timelineData = await res.json();
+
+    const totalSpentElem = document.getElementById('expenses-timeline-total');
+    const monthBadgeElem = document.getElementById('expenses-timeline-month-badge');
+
+    // Calculate total spend across this month's timeline
+    const monthTotal = timelineData.reduce((acc, p) => acc + (p.total_spent || 0), 0);
+    if (totalSpentElem) {
+      totalSpentElem.textContent = formatCurrency(monthTotal);
+    }
+
+    if (monthBadgeElem) {
+      if (timelineData.length > 0 && timelineData[0].date) {
+        try {
+          const [yr, mo] = timelineData[0].date.split('-');
+          const dObj = new Date(parseInt(yr), parseInt(mo) - 1, 1);
+          monthBadgeElem.textContent = dObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        } catch {
+          monthBadgeElem.textContent = timelineData[0].date.slice(0, 7);
+        }
+      } else if (monthYear) {
+        monthBadgeElem.textContent = monthYear;
+      } else {
+        monthBadgeElem.textContent = new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+    }
+
+    const labels = timelineData.map(p => p.formatted_date || p.date);
+    const dataValues = timelineData.map(p => p.total_spent);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Create custom emerald gradient fill for bars
+    const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.85)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0.15)');
+
+    if (expensesTimelineChart) {
+      expensesTimelineChart.data.labels = labels;
+      expensesTimelineChart.data.datasets[0].data = dataValues;
+      expensesTimelineChart.data.datasets[0].backgroundColor = gradient;
+      expensesTimelineChart.options.plugins.tooltip.callbacks.title = function(items) {
+        if (!items.length) return '';
+        const idx = items[0].dataIndex;
+        const pt = timelineData[idx];
+        return `Date: ${pt ? pt.date : items[0].label}`;
+      };
+      expensesTimelineChart.options.plugins.tooltip.callbacks.afterLabel = function(context) {
+        const idx = context.dataIndex;
+        const pt = timelineData[idx];
+        if (pt && pt.items && pt.items.length) {
+          const lines = ['Breakdown:'];
+          pt.items.forEach(it => {
+            lines.push(` • ${it.name}: ${formatCurrency(it.amount)}`);
+          });
+          return lines.join('\n');
+        }
+        return '';
+      };
+      expensesTimelineChart.update();
+    } else {
+      expensesTimelineChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Daily Expenses',
+            data: dataValues,
+            backgroundColor: gradient,
+            borderColor: '#10b981',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            borderSkipped: false,
+            maxBarThickness: 42,
+            hoverBackgroundColor: '#34d399',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 600,
+            easing: 'easeOutQuart',
+          },
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: false,
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#ffffff',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(51, 65, 85, 0.8)',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 10,
+              displayColors: false,
+              callbacks: {
+                title: function(items) {
+                  if (!items.length) return '';
+                  const idx = items[0].dataIndex;
+                  const pt = timelineData[idx];
+                  return `Date: ${pt ? pt.date : items[0].label}`;
+                },
+                label: function(context) {
+                  return `Total Spend: ${formatCurrency(context.parsed.y)}`;
+                },
+                afterLabel: function(context) {
+                  const idx = context.dataIndex;
+                  const pt = timelineData[idx];
+                  if (pt && pt.items && pt.items.length) {
+                    const lines = ['Breakdown:'];
+                    pt.items.forEach(it => {
+                      lines.push(` • ${it.name}: ${formatCurrency(it.amount)}`);
+                    });
+                    return lines.join('\n');
+                  }
+                  return '';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(51, 65, 85, 0.25)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'monospace',
+                  size: 11,
+                },
+                maxRotation: 45,
+                minRotation: 0,
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(51, 65, 85, 0.25)',
+                drawBorder: false,
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'monospace',
+                  size: 11,
+                },
+                callback: function(val) {
+                  return formatCurrency(val);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error loading expenses timeline:', err);
+  }
+}
+
+
 // Fetch and Render Recent Transactions
 async function fetchTransactions() {
   const container = document.getElementById('recent-transactions-list');
@@ -386,6 +571,7 @@ async function refreshDashboard() {
   await Promise.allSettled([
     fetchSummary(),
     fetchCategories(),
+    fetchExpensesTimeline(),
     fetchTransactions(),
     fetchSystemStatus()
   ]);
@@ -623,6 +809,7 @@ function setupCrudModal() {
   if (filterSelect) {
     filterSelect.addEventListener('change', () => {
       loadMonthlyExpenses(filterSelect.value);
+      fetchExpensesTimeline(filterSelect.value);
     });
   }
 }

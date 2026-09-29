@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import socket
 import sqlite3
 import sys
 
@@ -88,7 +89,7 @@ def run_tests():
         r = client.get("/api/v1/system/status")
         assert r.status_code == 200, f"System status failed: {r.text}"
         sys_data = r.json()
-        assert sys_data["device_name"] == "Chespin Hub (Raspberry Pi)"
+        assert sys_data["device_name"] == "Chespin-Hub@" + socket.gethostname()
         assert sys_data["status"] == "Online"
         print(f"[PASS] GET /api/v1/system/status returned 200: {sys_data['device_name']}")
 
@@ -99,6 +100,17 @@ def run_tests():
         r_static = client.get("/static/favicon.ico")
         assert r_static.status_code == 200, f"/static/favicon.ico failed: {r_static.status_code}"
         print(f"[PASS] Favicon endpoints verified (/favicon.ico, /static/favicon.ico) - {len(r_ico.content)} bytes")
+
+        # Test Expenses Timeline by Date
+        r_timeline = client.get("/api/v1/expenses/timeline?month=09&year=2026")
+        assert r_timeline.status_code == 200, f"Timeline endpoint failed: {r_timeline.text}"
+        timeline_data = r_timeline.json()
+        assert len(timeline_data) > 0, "Timeline data should not be empty"
+        assert "date" in timeline_data[0]
+        assert "total_spent" in timeline_data[0]
+        assert "formatted_date" in timeline_data[0]
+        assert timeline_data[0]["total_spent"] > 0
+        print(f"[PASS] GET /api/v1/expenses/timeline returned {len(timeline_data)} daily points (first: {timeline_data[0]['date']} = ${timeline_data[0]['total_spent']})")
 
         # ----------------------------------------------------
         # Test Pre-load Expenses Option with No Data (Failure)

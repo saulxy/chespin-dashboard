@@ -217,6 +217,39 @@
 
     </section>
 
+    <!-- Expenses of the Month Timeline Graph Section -->
+    <section class="glass-card rounded-2xl p-6 lg:p-8 border border-slate-800/80 bg-slate-900/40 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center space-x-2">
+              <span>Expenses of the Month</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Daily spending distribution across the billing cycle</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3 self-end sm:self-auto font-mono">
+          <span id="expenses-timeline-month-badge"
+            class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800/90 text-emerald-400 border border-slate-700">
+            --
+          </span>
+          <div class="text-right pl-3 border-l border-slate-800">
+            <span class="text-[10px] text-slate-500 uppercase tracking-wider block">Total Spent</span>
+            <span id="expenses-timeline-total" class="text-base font-bold text-white">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart Canvas Container -->
+      <div class="relative w-full h-64 sm:h-72 lg:h-80 pt-2">
+        <canvas id="monthlyExpensesTimelineChart"></canvas>
+      </div>
+    </section>
+
     <!-- Chespin Hub Status Footer (Small Squares for Each Indicator) -->
     <section class="mt-8 pt-6 border-t border-slate-800/80">
       <div class="flex items-center justify-between mb-3 text-slate-400">
