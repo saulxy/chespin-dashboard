@@ -228,7 +228,19 @@
             <h2 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center space-x-2">
               <span>Expenses of the Month</span>
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Daily spending distribution across the billing cycle</p>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 mt-0.5">
+              <span>Daily spending distribution across the billing cycle</span>
+              <div class="flex items-center space-x-2.5 pl-1 sm:border-l sm:border-slate-800">
+                <span class="inline-flex items-center space-x-1.5 text-[11px] text-slate-300">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                  <span>Past &amp; Today</span>
+                </span>
+                <span class="inline-flex items-center space-x-1.5 text-[11px] text-orange-400 font-medium">
+                  <span class="w-2 h-2 rounded-full bg-orange-500 shadow-sm shadow-orange-500/50"></span>
+                  <span>Upcoming (&gt; Today)</span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

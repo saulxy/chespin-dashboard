@@ -351,20 +351,50 @@ async function fetchExpensesTimeline(monthYear = null) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Create custom emerald gradient fill for bars
-    const gradient = ctx.createLinearGradient(0, 0, 0, 280);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.85)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0.15)');
+    // Default Emerald gradient for past & today (<= today)
+    const emeraldGradient = ctx.createLinearGradient(0, 0, 0, 280);
+    emeraldGradient.addColorStop(0, 'rgba(16, 185, 129, 0.85)');
+    emeraldGradient.addColorStop(1, 'rgba(16, 185, 129, 0.15)');
+
+    // Vibrant Orange gradient for upcoming dates (> today)
+    const orangeGradient = ctx.createLinearGradient(0, 0, 0, 280);
+    orangeGradient.addColorStop(0, 'rgba(249, 115, 22, 0.85)');
+    orangeGradient.addColorStop(1, 'rgba(249, 115, 22, 0.15)');
+
+    // Compute today's date formatted as YYYY-MM-DD for comparison
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    // Color logic: if date > today the bar should have an orange color, otherwise emerald
+    const backgroundColors = timelineData.map(p => {
+      const ptDate = (p.date || '').slice(0, 10);
+      return ptDate > todayStr ? orangeGradient : emeraldGradient;
+    });
+
+    const borderColors = timelineData.map(p => {
+      const ptDate = (p.date || '').slice(0, 10);
+      return ptDate > todayStr ? '#f97316' : '#10b981';
+    });
+
+    const hoverColors = timelineData.map(p => {
+      const ptDate = (p.date || '').slice(0, 10);
+      return ptDate > todayStr ? '#fb923c' : '#34d399';
+    });
 
     if (expensesTimelineChart) {
       expensesTimelineChart.data.labels = labels;
       expensesTimelineChart.data.datasets[0].data = dataValues;
-      expensesTimelineChart.data.datasets[0].backgroundColor = gradient;
+      expensesTimelineChart.data.datasets[0].backgroundColor = backgroundColors;
+      expensesTimelineChart.data.datasets[0].borderColor = borderColors;
+      expensesTimelineChart.data.datasets[0].hoverBackgroundColor = hoverColors;
       expensesTimelineChart.options.plugins.tooltip.callbacks.title = function(items) {
         if (!items.length) return '';
         const idx = items[0].dataIndex;
         const pt = timelineData[idx];
-        return `Date: ${pt ? pt.date : items[0].label}`;
+        const ptDate = (pt?.date || '').slice(0, 10);
+        const isFuture = ptDate > todayStr;
+        const dateStr = pt ? pt.date : items[0].label;
+        return isFuture ? `Date: ${dateStr} (Upcoming)` : `Date: ${dateStr}`;
       };
       expensesTimelineChart.options.plugins.tooltip.callbacks.afterLabel = function(context) {
         const idx = context.dataIndex;
@@ -387,13 +417,13 @@ async function fetchExpensesTimeline(monthYear = null) {
           datasets: [{
             label: 'Daily Expenses',
             data: dataValues,
-            backgroundColor: gradient,
-            borderColor: '#10b981',
+            backgroundColor: backgroundColors,
+            borderColor: borderColors,
             borderWidth: 1.5,
             borderRadius: 6,
             borderSkipped: false,
             maxBarThickness: 42,
-            hoverBackgroundColor: '#34d399',
+            hoverBackgroundColor: hoverColors,
           }]
         },
         options: {
@@ -425,7 +455,10 @@ async function fetchExpensesTimeline(monthYear = null) {
                   if (!items.length) return '';
                   const idx = items[0].dataIndex;
                   const pt = timelineData[idx];
-                  return `Date: ${pt ? pt.date : items[0].label}`;
+                  const ptDate = (pt?.date || '').slice(0, 10);
+                  const isFuture = ptDate > todayStr;
+                  const dateStr = pt ? pt.date : items[0].label;
+                  return isFuture ? `Date: ${dateStr} (Upcoming)` : `Date: ${dateStr}`;
                 },
                 label: function(context) {
                   return `Total Spend: ${formatCurrency(context.parsed.y)}`;
